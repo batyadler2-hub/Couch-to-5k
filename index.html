@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ef4f7a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="5K">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<title>מהספה ל־5K</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Rubik:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow phone column; home = week ladder, session = big timer with a bouncing mascot */
+:root{
+  --bg:#f2f6fb; --surface:#ffffff; --ink:#1c2738; --muted:#5d6b80; --line:#dde5ef;
+  --run:#ef4f7a; --run-soft:#ffe1ea; --walk:#1fa898; --walk-soft:#d6f4ef;
+  --calm:#7b6cf0; --calm-soft:#e7e3ff; --sun:#ffc23d; --sun-ink:#5a3d00;
+  --display:"Fredoka","Rubik",system-ui,sans-serif; --body:"Rubik",system-ui,"Segoe UI",Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111823; --surface:#1a2331; --ink:#eef3fa; --muted:#9aa8bc; --line:#2a3546;
+  --run:#ff6f95; --run-soft:#3d2030; --walk:#3cc9b7; --walk-soft:#173a37; --calm:#9d92ff; --calm-soft:#29264a;
+  --sun:#ffcc55; --sun-ink:#3a2800; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111823; --surface:#1a2331; --ink:#eef3fa; --muted:#9aa8bc; --line:#2a3546;
+  --run:#ff6f95; --run-soft:#3d2030; --walk:#3cc9b7; --walk-soft:#173a37; --calm:#9d92ff; --calm-soft:#29264a;
+  --sun:#ffcc55; --sun-ink:#3a2800; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{direction:rtl;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5}
+.wrap{max-width:540px;margin:0 auto;padding-block:20px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;line-height:1.15}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,select:focus-visible{outline:3px solid var(--calm);outline-offset:2px}
+.muted{color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+
+/* hero */
+.hero{display:flex;align-items:center;gap:14px}
+.hero h1{font-size:2rem}
+.hero p{margin:2px 0 0;color:var(--muted)}
+.mascot{flex:none}
+.mascot .body{transform-origin:50% 90%}
+.mascot.idle .body{animation:breathe 3s ease-in-out infinite}
+.mascot.walk .body{animation:hop .9s ease-in-out infinite}
+.mascot.run .body{animation:hop .42s ease-in-out infinite}
+.mascot.walk .legL,.mascot.run .legL{animation:legA .9s ease-in-out infinite}
+.mascot.walk .legR,.mascot.run .legR{animation:legB .9s ease-in-out infinite}
+.mascot.run .legL,.mascot.run .legR{animation-duration:.42s}
+.mascot.party .body{animation:spin 1s ease-in-out 3}
+@keyframes breathe{50%{transform:scale(1.03,.97)}}
+@keyframes hop{50%{transform:translateY(-6px)}}
+@keyframes legA{50%{transform:rotate(18deg)}}
+@keyframes legB{50%{transform:rotate(-18deg)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.legL{transform-origin:40px 78px}.legR{transform-origin:60px 78px}
+
+/* progress card */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:18px}
+.next{display:flex;flex-direction:column;gap:12px}
+.next .eyebrow{font-size:.8rem;letter-spacing:.04em;color:var(--muted);font-weight:600}
+.next h2{font-size:1.6rem}
+.bar{height:10px;border-radius:99px;background:var(--line);overflow:hidden}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--walk),var(--sun));border-radius:inherit;transition:width .6s}
+.big{border:0;border-radius:16px;padding:14px 20px;font-family:var(--display);font-size:1.25rem;font-weight:600;background:var(--run);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px}
+.big:active{transform:scale(.98)}
+.strip{display:flex;height:14px;border-radius:7px;overflow:hidden;gap:2px}
+.strip i{display:block;height:100%}
+.k-run{background:var(--run)}.k-walk{background:var(--walk)}.k-warm,.k-cool{background:var(--calm)}
+
+/* weeks */
+.weeks{display:flex;flex-direction:column;gap:8px}
+.week{display:grid;grid-template-columns:96px 1fr;align-items:center;gap:10px;padding:10px 12px;border-radius:16px;background:var(--surface);border:1px solid var(--line)}
+.week b{font-family:var(--display);font-weight:600;font-size:1.05rem}
+.week small{display:block;color:var(--muted);font-size:.78rem;line-height:1.3}
+.days{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.day{border:2px solid var(--line);background:transparent;border-radius:12px;padding:8px 4px;font-size:.85rem;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:0;min-width:0}
+.day .d{font-family:var(--display);font-size:1.05rem}
+.day.done{background:var(--walk-soft);border-color:var(--walk);color:var(--ink)}
+.day.current{border-color:var(--run);background:var(--run-soft)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:12px;height:12px;border-radius:4px;display:inline-block}
+
+/* settings */
+details.card summary{font-family:var(--display);font-weight:600;font-size:1.1rem;cursor:pointer}
+.set{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.set label{display:flex;flex-direction:column;gap:6px;font-weight:500}
+.set select{font:inherit;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);max-width:100%}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{border:1px solid var(--line);background:var(--bg);border-radius:99px;padding:8px 14px;font-size:.9rem}
+.warn{background:var(--sun);color:var(--sun-ink);border-radius:14px;padding:12px 14px;font-size:.92rem}
+.warn b{display:block}
+
+/* session */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.back{border:0;background:transparent;font-size:1rem;padding:8px 0;color:var(--muted)}
+.stage{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;padding:20px 16px;border-radius:24px;background:var(--calm-soft);transition:background .5s}
+.stage.k-run-bg{background:var(--run-soft)}.stage.k-walk-bg{background:var(--walk-soft)}
+.phase{font-family:var(--display);font-size:2.2rem;font-weight:700}
+.clock{font-family:var(--display);font-size:4.2rem;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.sub{color:var(--muted);font-size:.95rem}
+.ring{width:100%;height:12px;border-radius:99px;background:color-mix(in srgb,var(--ink) 10%,transparent);overflow:hidden;margin-top:6px}
+.ring i{display:block;height:100%;width:0;background:var(--ink);opacity:.75;border-radius:inherit}
+.live{font-weight:600;font-size:.95rem;background:var(--surface);border-radius:99px;padding:6px 14px;margin-top:8px}
+.totals{display:flex;flex-wrap:wrap;gap:4px 16px;font-weight:600;font-size:.95rem}
+.inp{font:inherit;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);width:100%}
+.say{min-height:3em;font-size:1.05rem;font-weight:500;max-width:30ch}
+.controls{display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px}
+.ctl{border:1px solid var(--line);background:var(--surface);border-radius:16px;padding:14px 8px;font-size:1rem}
+.ctl.main{background:var(--ink);color:var(--bg);border:0;font-family:var(--display);font-size:1.3rem;font-weight:600}
+.tl{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.tl li{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:12px;font-size:.95rem}
+.tl li .dot{width:12px;height:12px;border-radius:50%;flex:none}
+.tl li .t{margin-inline-start:auto;color:var(--muted)}
+.tl li.now{background:var(--bg);font-weight:600;outline:2px solid var(--line)}
+.tl li.past{opacity:.45}
+.script{font-size:.95rem;color:var(--muted);margin:0}
+.donebox{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:20}
+.confetti i{position:absolute;top:-20px;width:10px;height:14px;border-radius:3px;animation:fall 2.6s linear forwards}
+@keyframes fall{to{transform:translateY(110vh) rotate(540deg)}}
+@media (prefers-reduced-motion:reduce){.mascot *{animation:none!important}.confetti{display:none}}
+#map{height:280px;border-radius:14px;overflow:hidden;z-index:0;background:var(--line)}
+.gps{font-size:.85rem;color:var(--muted);margin:8px 0 0}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--bg)}
+body{margin:0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="wrap" id="home">
+  <header class="hero">
+    <svg class="mascot idle" id="m1" width="84" height="84" viewBox="0 0 100 100" aria-hidden="true"></svg>
+    <div>
+      <h1>מהספה ל־5K</h1>
+      <p>9 שבועות, 3 ריצות בשבוע, לפי התכנית של ה־NHS</p>
+    </div>
+  </header>
+
+  <section class="card next" aria-labelledby="nextTitle">
+    <div class="eyebrow" id="nextEyebrow">האימון הבא</div>
+    <h2 id="nextTitle">שבוע 1 · ריצה 1</h2>
+    <div id="nextDesc" class="muted"></div>
+    <div class="strip" id="nextStrip"></div>
+    <button class="big" id="goNext" type="button">▶ לאימון של היום</button>
+    <div class="row muted num" style="justify-content:space-between;font-size:.88rem">
+      <span id="progTxt">0 מתוך 27 ריצות</span><span id="lastTxt"></span>
+    </div>
+    <div class="totals num" id="totals" hidden></div>
+    <button class="chip" id="askKg" type="button" hidden style="align-self:flex-start">⚖️ להזין משקל וגובה לחישוב קלוריות מדויק</button>
+    <div class="bar"><i id="progBar" style="width:0%"></i></div>
+  </section>
+
+  <div class="legend" aria-hidden="true">
+    <span><i class="k-run"></i>ריצה</span><span><i class="k-walk"></i>הליכה</span><span><i class="k-warm"></i>חימום / שחרור</span>
+  </div>
+
+  <section class="weeks" id="weeks" aria-label="כל השבועות"></section>
+
+  <details class="card" id="settings">
+    <summary>קריינית, צלילים ופרטים אישיים</summary>
+    <div class="set">
+      <div class="warn" id="tipEnh" hidden>
+        <b>רוצים קול טבעי יותר?</b>
+        באייפון: הגדרות › נגישות › תוכן מדובר › קולות › עברית, ולהוריד את "כרמית (משופר)". באנדרואיד: הגדרות › המרת טקסט לדיבור › מנוע Google › התקנת נתוני קול › עברית. אחר כך לחזור לכאן ולבחור את הקול החדש ברשימה.
+      </div>
+      <div class="warn" id="noVoice" hidden>
+        <b>לא מצאתי קול בעברית במכשיר הזה</b>
+        האימון יעבוד עם צלילים וכיתוב על המסך. כדי לשמוע קריינות: באייפון, הגדרות › נגישות › תוכן מדובר › קולות › עברית. באנדרואיד, הגדרות › ניהול כללי › המרת טקסט לדיבור, ולהוריד עברית למנוע של Google.
+      </div>
+      <label for="voiceSel">קול
+        <select id="voiceSel"></select>
+      </label>
+      <div class="row">
+        <button class="chip" id="testVoice" type="button">🔊 לשמוע דוגמה</button>
+        <button class="chip" id="soundToggle" type="button" aria-pressed="true">🔔 צלילים: פועלים</button>
+      </div>
+      <div class="row" style="align-items:stretch">
+        <label for="kgIn" style="flex:1">משקל (ק״ג)<input id="kgIn" type="number" inputmode="decimal" min="30" max="250" step="0.5" class="inp"></label>
+        <label for="cmIn" style="flex:1">גובה (ס״מ)<input id="cmIn" type="number" inputmode="numeric" min="120" max="220" class="inp"></label>
+      </div>
+      <p class="muted" style="margin:0;font-size:.85rem">צעדים נספרים בחיישן התנועה של הטלפון, והמרחק והמסלול נמדדים ב־GPS, אחרי שמאשרים גישה בתחילת האימון. כשאין גישה מוצגת הערכה. הקלוריות מחושבות לפי המשקל, הזמן וסוג הפעילות.</p>
+      <div class="row">
+        <button class="chip" id="resetBtn" type="button">איפוס ההתקדמות</button>
+        <span id="resetConfirm" hidden class="row"><span>בטוח?</span><button class="chip" id="resetYes" type="button">כן, לאפס</button><button class="chip" id="resetNo" type="button">ביטול</button></span>
+      </div>
+      <p class="muted" style="margin:0;font-size:.85rem">ההתקדמות נשמרת בדפדפן של הטלפון הזה. אפשר לסמן או לבטל ריצה בלחיצה ארוכה על היום שלה ברשימה.</p>
+    </div>
+  </details>
+</div>
+
+<div class="wrap" id="session" hidden>
+  <div class="topbar">
+    <button class="back" id="backBtn" type="button">→ חזרה לתכנית</button>
+    <span class="muted num" id="totalLeft"></span>
+  </div>
+  <h2 id="sTitle" style="font-size:1.5rem"></h2>
+  <section class="stage" id="stage" aria-live="polite">
+    <svg class="mascot idle" id="m2" width="120" height="120" viewBox="0 0 100 100" aria-hidden="true"></svg>
+    <div class="phase" id="phase">מוכנים?</div>
+    <div class="clock" id="clock">0:00</div>
+    <div class="sub" id="nextUp"></div>
+    <div class="ring"><i id="segBar"></i></div>
+    <div class="live num" id="live">🔥 0 קק״ל · 👣 0 צעדים · 📏 0.00 ק״מ</div>
+    <div class="say" id="say"></div>
+    <button class="chip" id="hushBtn" type="button" hidden>🔇 להשתיק את הקריינית</button>
+  </section>
+  <section class="card" id="mapCard">
+    <h3 style="margin-bottom:10px">המסלול שלי</h3>
+    <div id="map" role="img" aria-label="מפת המסלול"></div>
+    <p class="gps" id="gpsMsg">המפה תתחיל לעקוב אחרי לחיצה על "מתחילים" ואישור גישה למיקום.</p>
+  </section>
+  <div class="controls">
+    <button class="ctl" id="prevSeg" type="button" aria-label="לשלב הקודם">⏮ אחורה</button>
+    <button class="ctl main" id="playBtn" type="button">▶ מתחילים</button>
+    <button class="ctl" id="nextSeg" type="button" aria-label="לשלב הבא">קדימה ⏭</button>
+  </div>
+  <p class="muted" style="margin:0;font-size:.85rem;text-align:center">כדאי להשאיר את המסך דלוק ואת הדף פתוח במהלך האימון, כדי שהקריינית תמשיך לדבר.</p>
+  <section class="card">
+    <h3 style="margin-bottom:10px">מה מחכה היום</h3>
+    <ol class="tl" id="tl"></ol>
+  </section>
+  <section class="card">
+    <h3 style="margin-bottom:8px">התסריט של היום</h3>
+    <p class="script" id="script"></p>
+  </section>
+</div>
+<div class="confetti" id="confetti"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+document.documentElement.dir='rtl';document.documentElement.lang='he';
+/* ---------- the NHS plan ---------- */
+const R=s=>['run',s], W=s=>['walk',s];
+function rep(n,arr){let o=[];for(let i=0;i<n;i++)o=o.concat(arr);return o}
+function trimEndWalk(a){if(a.length&&a[a.length-1][0]==='walk')a.pop();return a}
+const W1=trimEndWalk(rep(8,[R(60),W(90)]));
+const W2=trimEndWalk(rep(6,[R(90),W(120)]));
+const W3=trimEndWalk(rep(2,[R(90),W(90),R(180),W(180)]));
+const W4=[R(180),W(90),R(300),W(150),R(180),W(90),R(300)];
+const PLAN=[
+  [W1,W1,W1],[W2,W2,W2],[W3,W3,W3],[W4,W4,W4],
+  [[R(300),W(180),R(300),W(180),R(300)],[R(480),W(300),R(480)],[R(1200)]],
+  [[R(300),W(180),R(480),W(180),R(300)],[R(600),W(180),R(600)],[R(1500)]],
+  [[R(1500)],[R(1500)],[R(1500)]],
+  [[R(1680)],[R(1680)],[R(1680)]],
+  [[R(1800)],[R(1800)],[R(1800)]]
+];
+const WEEK_NOTE=[
+ 'דקה ריצה, דקה וחצי הליכה, שמונה פעמים',
+ 'דקה וחצי ריצה, שתי דקות הליכה, שש פעמים',
+ 'ריצות של דקה וחצי ושל שלוש דקות',
+ 'ריצות של שלוש ושל חמש דקות',
+ 'כל ריצה שונה, ובסוף 20 דקות רצוף',
+ 'כל ריצה שונה, ובסוף 25 דקות רצוף',
+ '25 דקות ריצה רצופה',
+ '28 דקות ריצה רצופה',
+ '30 דקות ריצה. זה 5K!'
+];
+const WEEK_INTRO=[
+ ['ברוכים הבאים לשבוע הראשון! היום לומדים את הקצב: דקה ריצה, דקה וחצי הליכה, שמונה פעמים. רצים לאט, זה בכלל לא מירוץ.',
+  'ריצה שנייה בשבוע הראשון. אותו תרגיל כמו בפעם הקודמת: דקה ריצה, דקה וחצי הליכה. הגוף כבר מתחיל להכיר אותו.',
+  'ריצה שלישית, והשבוע הראשון כמעט מאחורינו! עוד פעם אחת דקה ריצה, דקה וחצי הליכה.'],
+ ['שבוע שני! הריצות מתארכות לדקה וחצי, וביניהן שתי דקות הליכה. טיפ קטן: אם אפשר לדבר תוך כדי ריצה, הקצב מושלם.',
+  'ריצה שנייה בשבוע שני. דקה וחצי ריצה, שתי דקות הליכה, שש פעמים. נושמים לאט ובנחת.',
+  'ריצה אחרונה של השבוע השני. עוד אימון אחד, ושבוע שלם מאחורינו!'],
+ ['שבוע שלוש! היום יש ריצות של דקה וחצי ושל שלוש דקות. ידיים רפויות, כתפיים למטה, וחיוך.',
+  'ריצה שנייה בשבוע שלוש. שלוש דקות ריצה כבר לא נשמעות כל כך מפחיד, נכון?',
+  'ריצה שלישית בשבוע שלוש. עוד אימון אחד, ואנחנו בחצי הדרך של התכנית.'],
+ ['שבוע ארבע! היום מגיעות ריצות של חמש דקות. זה צעד גדול, ואנחנו מוכנים לו.',
+  'ריצה שנייה בשבוע ארבע. שלוש דקות, חמש דקות, ושוב. צעד אחרי צעד.',
+  'ריצה אחרונה בשבוע ארבע. בשבוע הבא מתחילות הריצות הארוכות!'],
+ ['שבוע חמש! היום שלוש ריצות של חמש דקות, עם שלוש דקות הליכה ביניהן.',
+  'ריצה שנייה בשבוע חמש. היום שתי ריצות של שמונה דקות. רצים לאט, והזמן עובר מהר.',
+  'היום זה היום הגדול: עשרים דקות ריצה בלי הפסקה! רצים לאט מאוד, ופשוט ממשיכים. אנחנו יכולים.'],
+ ['שבוע שש! חמש דקות, שמונה דקות, ושוב חמש. אחרי עשרים דקות רצוף, זה כבר קטן עלינו.',
+  'ריצה שנייה בשבוע שש. שתי ריצות של עשר דקות. נושמים בנחת.',
+  'היום עשרים וחמש דקות ריצה רצופה. קצב רגוע, ולב שמח.'],
+ ['שבוע שבע! עשרים וחמש דקות ריצה. הגוף כבר יודע מה לעשות.',
+  'ריצה שנייה בשבוע שבע. עשרים וחמש דקות, צעד אחרי צעד.',
+  'ריצה שלישית בשבוע שבע. רק עוד שני שבועות!'],
+ ['שבוע שמונה! היום עשרים ושמונה דקות. כמעט שם.',
+  'ריצה שנייה בשבוע שמונה. עשרים ושמונה דקות של כיף.',
+  'ריצה אחרונה בשבוע שמונה. בשבוע הבא, השבוע האחרון!'],
+ ['השבוע האחרון בתכנית! שלושים דקות ריצה. מי היה מאמין שהגענו עד לכאן?',
+  'ריצה שנייה בשבוע האחרון. שלושים דקות, ואנחנו רצים כמו מקצוענים.',
+  'זו הריצה האחרונה בתכנית! שלושים דקות, ובסופן אנחנו רצי חמישה קילומטר. בואו נחגוג את זה בכל צעד.']
+];
+const DUR={60:'דקה',90:'דקה וחצי',120:'שתי דקות',150:'שתי דקות וחצי',180:'שלוש דקות',300:'חמש דקות',480:'שמונה דקות',600:'עשר דקות',1200:'עשרים דקות',1500:'עשרים וחמש דקות',1680:'עשרים ושמונה דקות',1800:'שלושים דקות'};
+const LABEL={warm:'חימום',run:'ריצה',walk:'הליכה',cool:'שחרור'};
+const RUN_GO=['יאללה, רצים!','קדימה, רצים! קליל ונעים.','זמן לרוץ! צעדים קטנים, חיוך גדול.','רצים! לאט ובכיף.','והופ, רצים!'];
+const WALK_GO=['מעולה! עכשיו הולכים.','כל הכבוד! הולכים ונושמים.','יופי! הליכה נינוחה.','איזה יופי! עוברים להליכה.','נהדר! הולכים ומחייכים.'];
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+
+function segs(w,d){
+  return [['warm',300]].concat(PLAN[w][d]).concat([['cool',300]]).map(([k,s])=>({k,s}));
+}
+const fmt=s=>{s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const mins=s=>Math.round(s/60);
+
+/* ---------- storage (per device) ---------- */
+const KEY='c25k-nhs-v1';
+let store={done:{},sound:true,voice2:'',kg:70,cm:165,kgSet:false,stats:{}};
+try{const v=JSON.parse(localStorage.getItem(KEY)||'null');if(v)store=Object.assign(store,v)}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(store))}catch(e){}};
+const id=(w,d)=>w+'-'+d;
+
+/* ---------- mascot ---------- */
+const MASCOT='<g class="legL"><rect x="36" y="74" width="7" height="16" rx="3.5" fill="var(--ink)"/><ellipse cx="38" cy="91" rx="8" ry="4.5" fill="var(--run)"/></g>'+
+ '<g class="legR"><rect x="57" y="74" width="7" height="16" rx="3.5" fill="var(--ink)"/><ellipse cx="62" cy="91" rx="8" ry="4.5" fill="var(--run)"/></g>'+
+ '<g class="body"><circle cx="50" cy="48" r="32" fill="var(--sun)"/>'+
+ '<path d="M24 34 Q50 8 76 34" fill="none" stroke="var(--walk)" stroke-width="7" stroke-linecap="round"/>'+
+ '<circle cx="40" cy="47" r="4.2" fill="#1c2738"/><circle cx="60" cy="47" r="4.2" fill="#1c2738"/>'+
+ '<circle cx="41.4" cy="45.6" r="1.4" fill="#fff"/><circle cx="61.4" cy="45.6" r="1.4" fill="#fff"/>'+
+ '<ellipse cx="32" cy="57" rx="5" ry="3" fill="#ff8fa8" opacity=".8"/><ellipse cx="68" cy="57" rx="5" ry="3" fill="#ff8fa8" opacity=".8"/>'+
+ '<path d="M44 58 Q50 64 56 58" fill="none" stroke="#1c2738" stroke-width="2.6" stroke-linecap="round"/></g>';
+document.getElementById('m1').innerHTML=MASCOT;
+document.getElementById('m2').innerHTML=MASCOT;
+const m2=document.getElementById('m2');
+const mood=c=>{m2.setAttribute('class','mascot '+c)};
+
+/* ---------- calories, steps, distance (estimates) ---------- */
+/* MET values from the Compendium of Physical Activities; cadence and stride are typical beginner values */
+const MET={warm:4.3,walk:3.5,cool:3.0,run:7.0};
+const CAD={warm:115,walk:105,cool:100,run:155};
+const STRIDE={warm:.415,walk:.40,cool:.38,run:.48};
+function burnUpTo(list,t){
+  let acc=0,kcal=0,steps=0,m=0;
+  for(const x of list){const s=Math.max(0,Math.min(x.s,t-acc));if(s<=0)break;
+    const mn=s/60;kcal+=MET[x.k]*3.5*store.kg/200*mn;const st=CAD[x.k]*mn;steps+=st;m+=st*STRIDE[x.k]*store.cm/100;acc+=x.s}
+  return {kcal:Math.round(kcal),steps:Math.round(steps),km:m/1000};
+}
+const fmtLive=b=>'🔥 '+b.kcal+' קק״ל · 👣 '+(b.estSteps?'~':'')+b.steps.toLocaleString('he-IL')+' צעדים · 📏 '+(b.estKm?'~':'')+b.km.toFixed(2)+' ק״מ';
+
+/* ---------- home ---------- */
+const $=s=>document.getElementById(s);
+function nextRun(){for(let w=0;w<9;w++)for(let d=0;d<3;d++)if(!store.done[id(w,d)])return [w,d];return null}
+function stripHTML(list){const tot=list.reduce((a,x)=>a+x.s,0);return list.map(x=>'<i class="k-'+x.k+'" style="flex:'+x.s+'"></i>').join('')}
+function describe(w,d){
+  const list=PLAN[w][d];const runs=list.filter(x=>x[0]==='run');
+  const tot=segs(w,d).reduce((a,x)=>a+x.s,0);
+  if(runs.length===1)return DUR[runs[0][1]]+' ריצה רצופה · '+mins(tot)+' דקות בסך הכל';
+  return runs.length+' קטעי ריצה · '+mins(tot)+' דקות בסך הכל';
+}
+function renderHome(){
+  $('askKg').hidden=!!store.kgSet;
+  const n=nextRun();const doneCount=Object.keys(store.done).length;
+  $('progTxt').textContent=doneCount+' מתוך 27 ריצות';
+  $('progBar').style.width=(doneCount/27*100)+'%';
+  const T={kcal:0,steps:0,km:0};
+  Object.keys(store.done).forEach(k=>{const st=store.stats[k]||(()=>{const[w,d]=k.split('-').map(Number);return burnUpTo(segs(w,d),1e9)})();T.kcal+=st.kcal;T.steps+=st.steps;T.km+=st.km});
+  $('totals').hidden=!doneCount;
+  $('totals').innerHTML='<span>🔥 '+T.kcal.toLocaleString('he-IL')+' קק״ל</span><span>👣 '+T.steps.toLocaleString('he-IL')+' צעדים</span><span>📏 '+T.km.toFixed(1)+' ק״מ</span><span class="muted" style="font-weight:400">(מתחילת התכנית)</span>';
+  const last=Object.values(store.done).sort().pop();
+  if(last){const days=Math.floor((Date.now()-last)/864e5);$('lastTxt').textContent=days===0?'ריצה אחרונה: היום. מחר יום מנוחה 💤':days===1?'ריצה אחרונה: אתמול':'ריצה אחרונה: לפני '+days+' ימים'}else $('lastTxt').textContent='';
+  if(n){const[w,d]=n;
+    $('nextEyebrow').textContent='האימון הבא';
+    $('nextTitle').textContent='שבוע '+(w+1)+' · ריצה '+(d+1);
+    const b=burnUpTo(segs(w,d),1e9);
+    $('nextDesc').textContent=describe(w,d)+' · כ־'+b.kcal+' קק״ל';
+    $('nextStrip').innerHTML=stripHTML(segs(w,d));
+    $('goNext').hidden=false;$('goNext').onclick=()=>openSession(w,d);
+  }else{
+    $('nextEyebrow').textContent='סיימת את כל התכנית';
+    $('nextTitle').textContent='🎉 רצים 5K!';
+    $('nextDesc').textContent='27 ריצות, 9 שבועות. אפשר להמשיך לרוץ 30 דקות שלוש פעמים בשבוע, או לחזור לכל אימון מהרשימה.';
+    $('nextStrip').innerHTML='';$('goNext').hidden=true;
+  }
+  const box=$('weeks');box.innerHTML='';
+  for(let w=0;w<9;w++){
+    const row=document.createElement('div');row.className='week';
+    row.innerHTML='<div><b>שבוע '+(w+1)+'</b><small>'+WEEK_NOTE[w]+'</small></div><div class="days"></div>';
+    const days=row.querySelector('.days');
+    for(let d=0;d<3;d++){
+      const b=document.createElement('button');b.type='button';
+      const done=!!store.done[id(w,d)];const cur=n&&n[0]===w&&n[1]===d;
+      b.className='day'+(done?' done':'')+(cur?' current':'');
+      const tot=segs(w,d).reduce((a,x)=>a+x.s,0);
+      b.innerHTML='<span class="d">'+(done?'✓':'ריצה '+(d+1))+'</span><span class="muted num" style="font-size:.75rem">'+mins(tot)+' דק׳</span>';
+      b.setAttribute('aria-label','שבוע '+(w+1)+' ריצה '+(d+1)+(done?', הושלמה':''));
+      let t=null,long=false;
+      b.addEventListener('pointerdown',()=>{long=false;t=setTimeout(()=>{long=true;toggleDone(w,d)},650)});
+      ['pointerup','pointerleave','pointercancel'].forEach(e=>b.addEventListener(e,()=>clearTimeout(t)));
+      b.addEventListener('click',()=>{if(!long)openSession(w,d)});
+      b.addEventListener('contextmenu',e=>e.preventDefault());
+      days.appendChild(b);
+    }
+    box.appendChild(row);
+  }
+}
+function toggleDone(w,d){const k=id(w,d);if(store.done[k]){delete store.done[k];delete store.stats[k]}else{store.done[k]=Date.now();store.stats[k]=burnUpTo(segs(w,d),1e9)}save();renderHome();if(navigator.vibrate)navigator.vibrate(30)}
+
+/* ---------- voice ---------- */
+const synth=window.speechSynthesis;let voices=[];let ctts=null,cttsOK=false;
+const QUAL=/(enhanced|premium|natural|neural|google|online|siri|משופר|פרימיום)/i;
+function heVoices(){return (synth?synth.getVoices():[]).filter(v=>/^(he|iw)/i.test(v.lang)).sort((a,b)=>(QUAL.test(b.name)?1:0)-(QUAL.test(a.name)?1:0))}
+function opt(sel,v,t){const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o)}
+function loadVoices(){
+  voices=heVoices();const sel=$('voiceSel');sel.innerHTML='';
+  if(cttsOK)opt(sel,'claude','קול Claude (הכי טבעי, דרך האינטרנט)');
+  voices.forEach(v=>opt(sel,v.name,v.name+(QUAL.test(v.name)?' ⭐':'')));
+  opt(sel,'none','בלי קריינות, רק צלילים');
+  $('noVoice').hidden=voices.length>0||cttsOK;
+  $('tipEnh').hidden=!voices.length||voices.some(v=>QUAL.test(v.name));
+  const vals=[...sel.options].map(o=>o.value);
+  sel.value=vals.includes(store.voice2)?store.voice2:vals[0];
+}
+if(synth){loadVoices();synth.onvoiceschanged=loadVoices;setTimeout(loadVoices,700)}else{loadVoices()}
+(async()=>{try{
+  if(!window.claude||!window.claude.use)return;
+  const t=await window.claude.use('tts');if(!t)return;
+  ctts=t;let langs;try{langs=t.languages?await t.languages():undefined}catch(e){}
+  cttsOK=!langs||langs.some(l=>/^(he|iw)/i.test(l));
+  t.onState(({state})=>{$('hushBtn').hidden=state==='idle'});
+  loadVoices();
+}catch(e){}})();
+$('voiceSel').onchange=e=>{store.voice2=e.target.value;save()};
+function engine(){const v=$('voiceSel').value;return v==='claude'?(cttsOK?'claude':'none'):v==='none'?'none':'device'}
+function speak(text,replace){
+  $('say').textContent=text;
+  const en=engine();
+  if(en==='claude'){
+    const o={voice:'airy',language:'he'};
+    const p=replace?ctts.speak(text,o):ctts.add(text,o);
+    p.catch(e=>{const c=e&&e.code;
+      if(c==='not_granted'){cttsOK=false;store.voice2='none';save();loadVoices()}
+      else if(c==='unavailable'){cttsOK=false;loadVoices()}});
+    return;
+  }
+  if(en!=='device'||!synth||!voices.length)return;
+  try{
+    if(replace)synth.cancel();
+    const u=new SpeechSynthesisUtterance(text);u.lang='he-IL';
+    const v=voices.find(v=>v.name===$('voiceSel').value)||voices[0];if(v)u.voice=v;
+    u.rate=0.95;u.pitch=1.0;synth.speak(u);
+  }catch(e){}
+}
+function hush(){try{if(synth)synth.cancel()}catch(e){}if(ctts)ctts.stop().catch(()=>{})}
+$('hushBtn').onclick=hush;
+$('testVoice').onclick=()=>{unlockAudio();chime('run');speak('היי! אני אלווה אתכם בכל ריצה. יאללה, רצים!',true)};
+const kgIn=$('kgIn'),cmIn=$('cmIn');kgIn.value=store.kg;cmIn.value=store.cm;
+kgIn.onchange=()=>{const v=parseFloat(kgIn.value);if(v>=30&&v<=250){store.kg=v;store.kgSet=true;save();renderHome()}else kgIn.value=store.kg};
+cmIn.onchange=()=>{const v=parseFloat(cmIn.value);if(v>=120&&v<=220){store.cm=v;save();renderHome()}else cmIn.value=store.cm};
+
+/* ---------- sounds ---------- */
+let ac=null;
+function unlockAudio(){try{if(!ac)ac=new (window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume()}catch(e){}}
+function tone(f,t0,dur,vol,type){
+  const o=ac.createOscillator(),g=ac.createGain();o.type=type||'sine';o.frequency.value=f;
+  g.gain.setValueAtTime(0,t0);g.gain.linearRampToValueAtTime(vol,t0+.02);g.gain.exponentialRampToValueAtTime(.0001,t0+dur);
+  o.connect(g).connect(ac.destination);o.start(t0);o.stop(t0+dur+.05);
+}
+function chime(kind){
+  if(!store.sound||!ac)return;const t=ac.currentTime+.02;
+  const seq={run:[523,659,784,1047],walk:[784,659,523],tick:[880],warm:[523,659],cool:[659,523,392],done:[523,659,784,1047,784,1047,1319]}[kind]||[660];
+  const step=kind==='done'?.13:.11;
+  seq.forEach((f,i)=>tone(f,t+i*step,kind==='tick'?.12:.35,kind==='tick'?.12:.22,kind==='tick'?'sine':'triangle'));
+  if(navigator.vibrate&&kind!=='tick')navigator.vibrate(kind==='run'?[120,60,120]:[200]);
+}
+$('soundToggle').onclick=e=>{store.sound=!store.sound;save();paintSound()};
+function paintSound(){const b=$('soundToggle');b.textContent=store.sound?'🔔 צלילים: פועלים':'🔕 צלילים: כבויים';b.setAttribute('aria-pressed',String(store.sound))}
+paintSound();
+
+$('askKg').onclick=()=>{$('settings').open=true;$('kgIn').focus();$('settings').scrollIntoView({behavior:'smooth'})};
+/* ---------- reset ---------- */
+$('resetBtn').onclick=()=>{$('resetConfirm').hidden=false};
+$('resetNo').onclick=()=>{$('resetConfirm').hidden=true};
+$('resetYes').onclick=()=>{store.done={};store.stats={};save();$('resetConfirm').hidden=true;renderHome()};
+
+/* ---------- GPS route + step sensor ---------- */
+const G={watch:null,lines:[[]],m:0,map:null,poly:null,dot:null,ok:false,last:null,lastT:0,gap:true};
+const gpsMsg=t=>{$('gpsMsg').textContent=t};
+function hav(a,b){const R=6371000,r=Math.PI/180,dl=(b[0]-a[0])*r,dg=(b[1]-a[1])*r;const h=Math.sin(dl/2)**2+Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+function ensureMap(){
+  if(G.map||!window.L)return;
+  G.map=L.map('map',{zoomControl:false}).setView([32.08,34.78],13);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(G.map);
+  G.poly=L.polyline([],{color:getComputedStyle(document.documentElement).getPropertyValue('--run').trim()||'#ef4f7a',weight:5}).addTo(G.map);
+}
+function resetRoute(){G.lines=[[]];G.m=0;G.ok=false;G.last=null;G.gap=true;if(G.poly)G.poly.setLatLngs([]);if(G.dot){G.dot.remove();G.dot=null}}
+function startGPS(){
+  if(!('geolocation' in navigator)){gpsMsg('אין GPS זמין בדפדפן הזה, אז המרחק הוא הערכה.');return}
+  if(G.watch!==null)return;
+  gpsMsg('מחפשים קליטת GPS...');
+  G.watch=navigator.geolocation.watchPosition(p=>{
+    const c=p.coords,pt=[c.latitude,c.longitude],t=p.timestamp||Date.now();G.fixT=Date.now();
+    ensureMap();
+    if(!G.dot&&G.map){G.dot=L.circleMarker(pt,{radius:8,color:'#fff',weight:3,fillColor:'#1fa898',fillOpacity:1}).addTo(G.map);G.map.setView(pt,16)}
+    if(G.dot)G.dot.setLatLng(pt);
+    if(c.accuracy>35){gpsMsg('הקליטה עדיין לא מדויקת ('+Math.round(c.accuracy)+' מ׳). עדיף להיות בשטח פתוח.');return}
+    if(!S||!S.running){G.gap=true;return}
+    if(G.gap){G.lines.push([pt]);G.gap=false;G.last=pt;G.lastT=t}
+    else{const d=hav(G.last,pt),dt=Math.max(1,(t-G.lastT)/1000);
+      if(d<4)return; if(d/dt>9)return; /* ignore GPS jumps */
+      G.m+=d;G.last=pt;G.lastT=t;G.lines[G.lines.length-1].push(pt)}
+    G.ok=true;
+    if(G.poly)G.poly.setLatLngs(G.lines.filter(l=>l.length));
+    if(G.map)G.map.panTo(pt,{animate:true});
+    gpsMsg('GPS פעיל · דיוק '+Math.round(c.accuracy)+' מ׳ · '+(G.m/1000).toFixed(2)+' ק״מ');
+  },e=>{if(e.code!==1&&Date.now()-(G.fixT||0)<20000)return;gpsMsg(e.code===1?'לא אושרה גישה למיקום. אפשר לאשר אותה בהגדרות הדפדפן, ובינתיים המרחק הוא הערכה.':'אין כרגע קליטת GPS. המרחק בינתיים הוא הערכה.')},
+  {enableHighAccuracy:true,maximumAge:0,timeout:30000});
+}
+function stopGPS(){if(G.watch!==null){navigator.geolocation.clearWatch(G.watch);G.watch=null}}
+const ST={n:0,avg:9.8,above:false,last:0,got:false,on:false};
+function onMotion(e){
+  const a=e.accelerationIncludingGravity;if(!a||a.x==null)return;ST.got=true;
+  if(!S||!S.running)return;
+  const mag=Math.sqrt(a.x*a.x+a.y*a.y+a.z*a.z);ST.avg=ST.avg*0.96+mag*0.04;const dev=mag-ST.avg,t=performance.now();
+  if(!ST.above&&dev>1.5&&t-ST.last>270){ST.above=true;ST.n++;ST.last=t}
+  else if(ST.above&&dev<0.2)ST.above=false;
+}
+function startSteps(){
+  if(ST.on||typeof DeviceMotionEvent==='undefined')return;
+  const go=()=>{window.addEventListener('devicemotion',onMotion);ST.on=true};
+  try{
+    if(typeof DeviceMotionEvent.requestPermission==='function'){DeviceMotionEvent.requestPermission().then(r=>{if(r==='granted')go()}).catch(()=>{})}
+    else go();
+  }catch(e){}
+}
+function liveStats(t){
+  const b=burnUpTo(S.list,t);
+  if(ST.got&&ST.n>0)b.steps=ST.n;else b.estSteps=true;
+  if(G.ok&&G.m>0)b.km=G.m/1000;else b.estKm=true;
+  return b;
+}
+
+/* ---------- session ---------- */
+let S=null,timer=null,wake=null;
+function cueText(i,list,w,d){
+  const x=list[i];const runIdx=list.slice(0,i+1).filter(y=>y.k==='run').length;const runTotal=list.filter(y=>y.k==='run').length;
+  if(x.k==='warm')return 'מתחילים בחמש דקות של הליכה מהירה לחימום. מניעים ידיים, וזוקפים את הגב.';
+  if(x.k==='cool')return 'וזהו, סיימנו לרוץ! עכשיו חמש דקות של הליכה רגועה לשחרור. כל הכבוד!';
+  if(x.k==='run'){
+    let t=pick(RUN_GO)+' '+DUR[x.s]+' ריצה.';
+    if(runTotal>1&&runIdx===runTotal)t+=' זו הריצה האחרונה להיום!';
+    else if(runTotal>2&&runIdx===Math.ceil(runTotal/2))t+=' כבר באמצע האימון.';
+    return t;
+  }
+  return pick(WALK_GO)+' '+DUR[x.s]+' הליכה.';
+}
+function scriptFor(w,d){
+  const list=segs(w,d);const parts=[WEEK_INTRO[w][d]];
+  list.forEach((x,i)=>{
+    if(x.k==='warm')parts.push('חימום: חמש דקות הליכה מהירה.');
+    else if(x.k==='cool')parts.push('שחרור: חמש דקות הליכה רגועה, ואז חגיגה קטנה.');
+  });
+  const runs=list.filter(x=>x.k==='run');
+  parts.splice(2,0,runs.length>1?'אחר כך '+runs.length+' קטעי ריצה, ואני אודיע מתי לרוץ ומתי ללכת, ואגיד כשנשארות עשר שניות.':'אחר כך '+DUR[runs[0].s]+' של ריצה רצופה, ואני אעדכן כל חמש דקות כמה זמן עבר וכמה נשאר.');
+  return parts.join(' ');
+}
+function openSession(w,d){
+  stopTimer();
+  const list=segs(w,d);
+  S={w,d,list,total:list.reduce((a,x)=>a+x.s,0),elapsed:0,running:false,startedAt:0,seg:-1,said:{},finished:false,introDone:false};
+  resetRoute();ST.n=0;
+  setTimeout(()=>{ensureMap();if(G.map)G.map.invalidateSize()},50);
+  $('home').hidden=true;$('session').hidden=false;window.scrollTo(0,0);
+  $('sTitle').textContent='שבוע '+(w+1)+' · ריצה '+(d+1);
+  $('script').textContent=scriptFor(w,d);
+  $('tl').innerHTML=list.map((x,i)=>'<li data-i="'+i+'"><span class="dot k-'+x.k+'"></span>'+LABEL[x.k]+'<span class="t num">'+fmt(x.s)+'</span></li>').join('');
+  $('stage').className='stage';mood('idle');
+  $('phase').textContent='מוכנים?';$('clock').textContent=fmt(S.total);$('nextUp').textContent=describe(w,d);
+  $('say').textContent=WEEK_INTRO[w][d];$('segBar').style.width='0%';
+  {const b=burnUpTo(list,1e9);$('live').textContent='צפוי היום: כ־'+b.kcal+' קק״ל · '+b.steps.toLocaleString('he-IL')+' צעדים · '+b.km.toFixed(1)+' ק״מ';}
+  $('playBtn').textContent='▶ מתחילים';$('totalLeft').textContent='סה״כ '+mins(S.total)+' דקות';
+  try{location.hash='run-'+(w+1)+'-'+(d+1)}catch(e){}
+}
+function closeSession(){
+  stopTimer();hush();releaseWake();stopGPS();S=null;
+  $('session').hidden=true;$('home').hidden=false;renderHome();
+  try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}
+}
+$('backBtn').onclick=closeSession;
+function now(){return S.running?S.elapsed+(Date.now()-S.startedAt)/1000:S.elapsed}
+function segAt(t){let acc=0;for(let i=0;i<S.list.length;i++){if(t<acc+S.list[i].s)return [i,t-acc];acc+=S.list[i].s}return [S.list.length,0]}
+function segStart(i){return S.list.slice(0,i).reduce((a,x)=>a+x.s,0)}
+async function grabWake(){try{if(navigator.wakeLock&&!wake){wake=await navigator.wakeLock.request('screen');wake.addEventListener('release',()=>{wake=null})}}catch(e){}}
+function releaseWake(){try{wake&&wake.release()}catch(e){}wake=null}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S&&S.running){grabWake();tick()}});
+
+function play(){
+  unlockAudio();
+  if(S.finished)return;
+  startSteps();startGPS();
+  S.running=true;S.startedAt=Date.now();$('playBtn').textContent='⏸ הפסקה';grabWake();
+  if(!S.introDone){S.introDone=true;speak(WEEK_INTRO[S.w][S.d],true);}
+  else speak('ממשיכים!',true);
+  timer=setInterval(tick,250);tick();
+}
+function pause(){
+  S.elapsed=now();S.running=false;stopTimer();$('playBtn').textContent='▶ ממשיכים';mood('idle');
+  speak('עצרנו לרגע. לוחצים על המשך כשמוכנים.',true);releaseWake();
+}
+function stopTimer(){if(timer){clearInterval(timer);timer=null}}
+$('playBtn').onclick=()=>{if(!S)return;S.running?pause():play()};
+function jump(i){
+  if(!S)return;i=Math.max(0,Math.min(S.list.length-1,i));
+  S.elapsed=segStart(i);if(S.running)S.startedAt=Date.now();S.seg=-1;
+  for(const k in S.said)if(k.startsWith(i+':'))delete S.said[k];
+  hush();tick(true);
+}
+$('prevSeg').onclick=()=>{if(!S)return;const[i,into]=segAt(now());jump(into>5||i===0?i:i-1)};
+$('nextSeg').onclick=()=>{if(!S)return;jump(segAt(now())[0]+1)};
+
+function tick(force){
+  if(!S)return;const t=now();
+  if(t>=S.total){finish();return}
+  const[i,into]=segAt(t);const x=S.list[i];const left=x.s-into;
+  if(i!==S.seg){
+    const first=S.seg===-1&&!force;S.seg=i;
+    $('phase').textContent=LABEL[x.k];
+    $('stage').className='stage'+(x.k==='run'?' k-run-bg':x.k==='walk'?' k-walk-bg':'');
+    const nx=S.list[i+1];$('nextUp').textContent=nx?'אחר כך: '+LABEL[nx.k]+' '+fmt(nx.s):'אחר כך: סיום וחגיגה 🎉';
+    document.querySelectorAll('#tl li').forEach(li=>{const j=+li.dataset.i;li.className=j<i?'past':j===i?'now':''});
+    if(S.running){
+      chime(x.k);
+      if(first&&i===0){speak(cueText(0,S.list,S.w,S.d))}
+      else{setTimeout(()=>{if(S&&S.seg===i)speak(cueText(i,S.list,S.w,S.d),true)},700)}
+    }
+  }
+  if(S.running){
+    mood(x.k==='run'?'run':'walk');
+    const key=(n)=>i+':'+n;
+    if(x.s>=240&&x.k==='run'&&x.s<1200&&into>=x.s/2&&!S.said[key('half')]){S.said[key('half')]=1;speak('חצי מהריצה מאחורינו! ממשיכים בקצב.')}
+    if(x.s>=1200&&x.k==='run'){
+      const m=Math.floor(into/300)*5;
+      if(m>0&&into-m*60<5&&!S.said[key('m'+m)]&&x.s-m*60>=120){S.said[key('m'+m)]=1;const rem=Math.round((x.s-m*60)/60);speak('עברו '+m+' דקות. נשארו '+rem+'. '+pick(['הולך מצוין!','איזה יופי!','רצים כמו אלופים!','ממשיכים בנחת.']))}
+      if(left<=60&&left>58&&!S.said[key('last')]){S.said[key('last')]=1;speak('דקה אחרונה! עוד קצת, ואנחנו שם!')}
+    }
+    if(left<=10&&left>9&&x.s>=60&&!S.said[key('10')]){S.said[key('10')]=1;
+      const nx=S.list[i+1];
+      if(x.k==='run'&&x.s<1200)speak('עוד עשר שניות, כמעט!');
+      else if(nx&&nx.k==='run')speak('עוד עשר שניות, ומתחילים לרוץ.');
+    }
+    if(left<=3&&left>0){const s=Math.ceil(left);if(!S.said[key('t'+s)]){S.said[key('t'+s)]=1;chime('tick')}}
+  }
+  $('clock').textContent=fmt(left);
+  $('live').textContent=fmtLive(liveStats(t));
+  $('segBar').style.width=(into/x.s*100)+'%';
+  $('totalLeft').textContent='נשארו '+fmt(S.total-t)+' בסך הכל';
+}
+function finish(){
+  stopTimer();S.running=false;S.finished=true;S.elapsed=S.total;releaseWake();
+  stopGPS();const fb=liveStats(S.total);delete fb.estSteps;delete fb.estKm;store.done[id(S.w,S.d)]=Date.now();store.stats[id(S.w,S.d)]=fb;save();
+  $('live').textContent=fmtLive(fb);
+  const all=Object.keys(store.done).length===27;
+  $('phase').textContent=all?'5K! 🏆':'סיימנו! 🎉';$('clock').textContent='0:00';$('segBar').style.width='100%';
+  $('stage').className='stage k-walk-bg';mood('party');$('playBtn').textContent='✓ נשמר';
+  $('nextUp').textContent='האימון סומן כהושלם';$('totalLeft').textContent='';
+  document.querySelectorAll('#tl li').forEach(li=>li.className='past');
+  chime('done');
+  const msg=all?'סיימנו את כל התכנית! תשעה שבועות, עשרים ושבע ריצות, ועכשיו רצים חמישה קילומטר. זה לגמרי מגיע לנו. כל הכבוד!':
+    S.d===2?'סיימנו את שבוע '+(S.w+1)+'! שבוע שלם מאחורינו. עכשיו מים, מתיחות, ומנוחה טובה. כל הכבוד!':
+    'וזהו! סיימנו את האימון של היום. היה מעולה! עכשיו מים, מתיחות קלות, ויום מנוחה. נתראה בריצה הבאה!';
+  setTimeout(()=>speak(msg+' שרפנו בערך '+fb.kcal+' קלוריות!',true),1200);confetti();
+}
+function confetti(){
+  const c=$('confetti');c.innerHTML='';const cols=['var(--run)','var(--walk)','var(--sun)','var(--calm)'];
+  for(let i=0;i<70;i++){const e=document.createElement('i');e.style.left=Math.random()*100+'%';e.style.background=cols[i%4];e.style.animationDelay=(Math.random()*1.2)+'s';e.style.transform='rotate('+Math.random()*90+'deg)';c.appendChild(e)}
+  setTimeout(()=>c.innerHTML='',4500);
+}
+
+/* ---------- boot ---------- */
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
+renderHome();
+function route(){const m=/^#run-(\d)-(\d)$/.exec(location.hash||'');if(m){const w=+m[1]-1,d=+m[2]-1;if(w>=0&&w<9&&d>=0&&d<3&&(!S||S.w!==w||S.d!==d))openSession(w,d)}else if(S&&!S.running)closeSession()}
+window.addEventListener('hashchange',route);route();
+})();
+</script>
+
+</body>
+</html>
