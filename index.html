@@ -222,7 +222,7 @@ body{margin:0}
     <button class="ctl main" id="playBtn" type="button">▶ מתחילים</button>
     <button class="ctl" id="nextSeg" type="button" aria-label="לשלב הבא">קדימה ⏭</button>
   </div>
-  <p class="muted" style="margin:0;font-size:.85rem;text-align:center">כדאי להשאיר את המסך דלוק ואת הדף פתוח במהלך האימון, כדי שהקריינית תמשיך לדבר.</p>
+  <p class="muted" style="margin:0;font-size:.85rem;text-align:center">🎧 עם ספוטיפיי: מפעילים מוזיקה בספוטיפיי, חוזרים לכאן ולוחצים מתחילים. המסך יישאר דלוק לבד. אם נועלים אותו או עוברים לאפליקציה אחרת, הקריינית שותקת עד שחוזרים, והטיימר ממשיך.</p>
   <section class="card">
     <h3 style="margin-bottom:10px">מה מחכה היום</h3>
     <ol class="tl" id="tl"></ol>
@@ -584,7 +584,13 @@ function segAt(t){let acc=0;for(let i=0;i<S.list.length;i++){if(t<acc+S.list[i].
 function segStart(i){return S.list.slice(0,i).reduce((a,x)=>a+x.s,0)}
 async function grabWake(){try{if(navigator.wakeLock&&!wake){wake=await navigator.wakeLock.request('screen');wake.addEventListener('release',()=>{wake=null})}}catch(e){}}
 function releaseWake(){try{wake&&wake.release()}catch(e){}wake=null}
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S&&S.running){grabWake();tick()}});
+let hiddenAt=0;
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){hiddenAt=Date.now();return}
+  if(S&&S.running){grabWake();const away=hiddenAt?(Date.now()-hiddenAt)/1000:0;hiddenAt=0;tick();
+    if(away>8){const t=now();if(t<S.total){const[i,into]=segAt(t);const x=S.list[i];
+      speak('חזרנו! עכשיו '+LABEL[x.k]+', ונשארו '+(x.s-into>=90?Math.round((x.s-into)/60)+' דקות':Math.round(x.s-into)+' שניות')+'.',true)}}}
+});
 
 function play(){
   unlockAudio();
