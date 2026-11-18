@@ -81,7 +81,10 @@ button:focus-visible,select:focus-visible{outline:3px solid var(--calm);outline-
 .days{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .day{border:2px solid var(--line);background:transparent;border-radius:12px;padding:8px 4px;font-size:.85rem;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:0;min-width:0}
 .day .d{font-family:var(--display);font-size:1.05rem}
-.day.done{background:var(--walk-soft);border-color:var(--walk);color:var(--ink)}
+.day.done{background:var(--sun);border-color:var(--sun);color:var(--sun-ink)}
+.day.done .muted{color:var(--sun-ink);opacity:.8}
+.day.done .d{font-size:1.5rem;line-height:1.2}
+.week.allDone{background:color-mix(in srgb,var(--sun) 22%,var(--surface));border-color:var(--sun)}
 .day.current{border-color:var(--run);background:var(--run-soft)}
 .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem;color:var(--muted)}
 .legend span{display:inline-flex;align-items:center;gap:6px}
@@ -376,7 +379,7 @@ function renderHome(){
   }
   const box=$('weeks');box.innerHTML='';
   for(let w=0;w<9;w++){
-    const row=document.createElement('div');row.className='week';
+    const row=document.createElement('div');row.className='week'+([0,1,2].every(d=>store.done[id(w,d)])?' allDone':'');
     row.innerHTML='<div><b>שבוע '+(w+1)+'</b><small>'+WEEK_NOTE[w]+'</small></div><div class="days"></div>';
     const days=row.querySelector('.days');
     for(let d=0;d<3;d++){
@@ -384,7 +387,7 @@ function renderHome(){
       const done=!!store.done[id(w,d)];const cur=n&&n[0]===w&&n[1]===d;
       b.className='day'+(done?' done':'')+(cur?' current':'');
       const tot=segs(w,d).reduce((a,x)=>a+x.s,0);
-      b.innerHTML='<span class="d">'+(done?'✓':'ריצה '+(d+1))+'</span><span class="muted num" style="font-size:.75rem">'+mins(tot)+' דק׳</span>';
+      b.innerHTML='<span class="d">'+(done?TREATS[(w*3+d)%TREATS.length]:'ריצה '+(d+1))+'</span><span class="muted num" style="font-size:.75rem">'+mins(tot)+' דק׳</span>';
       b.setAttribute('aria-label','שבוע '+(w+1)+' ריצה '+(d+1)+(done?', הושלמה':''));
       let t=null,long=false;
       b.addEventListener('pointerdown',()=>{long=false;t=setTimeout(()=>{long=true;toggleDone(w,d)},650)});
@@ -396,6 +399,7 @@ function renderHome(){
     box.appendChild(row);
   }
 }
+const TREATS=['🛋️','🍕','🍦','😎','🍩','🧁','🏅','🥤','🍫','⭐','🍿','🎉','🛀','🍉','🌈','🥳','🍰','💪','😴','🍓','🎈','🍪','🧸','🌟','🍔','🏆','👑'];
 function toggleDone(w,d){const k=id(w,d);if(store.done[k]){delete store.done[k];delete store.stats[k]}else{store.done[k]=Date.now();store.stats[k]=burnUpTo(segs(w,d),1e9)}save();renderHome();if(navigator.vibrate)navigator.vibrate(30)}
 
 /* ---------- voice ---------- */
