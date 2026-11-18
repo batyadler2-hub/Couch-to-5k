@@ -1,5 +1,5 @@
 // Offline support: the app shell works without network; map tiles need network.
-const CACHE='c25k-v2';
+const CACHE='c25k-v1';
 const SHELL=['./','index.html','manifest.webmanifest','icon-192.png','icon-512.png','icon-180.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css','https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()))});

@@ -681,7 +681,11 @@ function confetti(){
 /* ---------- boot ---------- */
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
 renderHome();
-function route(){const m=/^#run-(\d)-(\d)$/.exec(location.hash||'');if(m){const w=+m[1]-1,d=+m[2]-1;if(w>=0&&w<9&&d>=0&&d<3&&(!S||S.w!==w||S.d!==d))openSession(w,d)}else if(S&&!S.running)closeSession()}
+function route(){
+  const dm=/^#done((?:-w\dr\d)+)$/.exec(location.hash||'');
+  if(dm){let n=0;(dm[1].match(/w\dr\d/g)||[]).forEach(t=>{const w=+t[1]-1,d=+t[3]-1;if(w>=0&&w<9&&d>=0&&d<3&&!store.done[id(w,d)]){store.done[id(w,d)]=Date.now();store.stats[id(w,d)]=burnUpTo(segs(w,d),1e9);n++}});
+    save();try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}renderHome();if(n)confetti();return}
+  const m=/^#run-(\d)-(\d)$/.exec(location.hash||'');if(m){const w=+m[1]-1,d=+m[2]-1;if(w>=0&&w<9&&d>=0&&d<3&&(!S||S.w!==w||S.d!==d))openSession(w,d)}else if(S&&!S.running)closeSession()}
 window.addEventListener('hashchange',route);route();
 })();
 </script>
