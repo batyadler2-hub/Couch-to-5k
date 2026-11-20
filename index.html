@@ -178,7 +178,7 @@ body{margin:0}
         <b>לא מצאתי קול בעברית במכשיר הזה</b>
         האימון יעבוד עם צלילים וכיתוב על המסך. כדי לשמוע קריינות: באייפון, הגדרות › נגישות › תוכן מדובר › קולות › עברית. באנדרואיד, הגדרות › ניהול כללי › המרת טקסט לדיבור, ולהוריד עברית למנוע של Google.
       </div>
-      <label for="voiceSel">קול
+      <label for="voiceSel" hidden>קול
         <select id="voiceSel"></select>
       </label>
       <div class="row">
@@ -186,9 +186,10 @@ body{margin:0}
         <button class="chip" id="soundToggle" type="button" aria-pressed="true">🔔 צלילים: פועלים</button>
       </div>
       <div class="row" style="align-items:stretch">
-        <label for="kgIn" style="flex:1">משקל (ק״ג)<input id="kgIn" type="number" inputmode="decimal" min="30" max="250" step="0.5" class="inp"></label>
-        <label for="cmIn" style="flex:1">גובה (ס״מ)<input id="cmIn" type="number" inputmode="numeric" min="120" max="220" class="inp"></label>
+        <label for="kgIn" style="flex:1">משקל (ק״ג)<input id="kgIn" type="text" inputmode="decimal" autocomplete="off" class="inp"></label>
+        <label for="cmIn" style="flex:1">גובה (ס״מ)<input id="cmIn" type="text" inputmode="numeric" autocomplete="off" class="inp"></label>
       </div>
+      <div class="row"><button class="chip" id="saveBody" type="button">💾 שמירה</button><span id="bodyMsg" class="muted" aria-live="polite"></span></div>
       <p class="muted" style="margin:0;font-size:.85rem">צעדים נספרים בחיישן התנועה של הטלפון, והמרחק והמסלול נמדדים ב־GPS, אחרי שמאשרים גישה בתחילת האימון. כשאין גישה מוצגת הערכה. הקלוריות מחושבות לפי המשקל, הזמן וסוג הפעילות.</p>
       <div class="row">
         <button class="chip" id="resetBtn" type="button">איפוס ההתקדמות</button>
@@ -405,19 +406,25 @@ function toggleDone(w,d){const k=id(w,d);if(store.done[k]){delete store.done[k];
 /* ---------- voice ---------- */
 const synth=window.speechSynthesis;let voices=[];let ctts=null,cttsOK=false;
 const QUAL=/(enhanced|premium|natural|neural|google|online|siri|משופר|פרימיום)/i;
-function heVoices(){return (synth?synth.getVoices():[]).filter(v=>/^(he|iw)/i.test(v.lang)).sort((a,b)=>(QUAL.test(b.name)?1:0)-(QUAL.test(a.name)?1:0))}
+const vq=v=>QUAL.test(v.name+' '+(v.voiceURI||''));const vk=v=>v.voiceURI||v.name;
+function heVoices(){return (synth?synth.getVoices():[]).filter(v=>/^(he|iw)/i.test(v.lang)).sort((a,b)=>(vq(b)?1:0)-(vq(a)?1:0))}
 function opt(sel,v,t){const o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o)}
 function loadVoices(){
   voices=heVoices();const sel=$('voiceSel');sel.innerHTML='';
   if(cttsOK)opt(sel,'claude','קול Claude (הכי טבעי, דרך האינטרנט)');
-  voices.forEach(v=>opt(sel,v.name,v.name+(QUAL.test(v.name)?' ⭐':'')));
+  voices.forEach(v=>opt(sel,vk(v),v.name+(vq(v)&&!/משופר|enhanced|premium/i.test(v.name)?' (משופר)':'')+(vq(v)?' ⭐':'')));
+  if(!voices.length&&synth)opt(sel,'default','הקול העברי של הטלפון');
   opt(sel,'none','בלי קריינות, רק צלילים');
-  $('noVoice').hidden=voices.length>0||cttsOK;
-  $('tipEnh').hidden=!voices.length||voices.some(v=>QUAL.test(v.name));
+  $('noVoice').hidden=voices.length>0||cttsOK||!!synth;
+  $('tipEnh').hidden=!voices.length||voices.some(vq);
   const vals=[...sel.options].map(o=>o.value);
-  sel.value=vals.includes(store.voice2)?store.voice2:vals[0];
+  const saved=voices.find(v=>vk(v)===store.voice2||v.name===store.voice2);
+  const keep=store.voice2==='claude'||store.voice2==='none'||(saved&&(vq(saved)||!voices.some(vq)));
+  sel.value=keep&&vals.includes(saved?vk(saved):store.voice2)?(saved?vk(saved):store.voice2):vals[0];
 }
-if(synth){loadVoices();synth.onvoiceschanged=loadVoices;setTimeout(loadVoices,700)}else{loadVoices()}
+if(synth){loadVoices();try{synth.addEventListener('voiceschanged',loadVoices)}catch(e){synth.onvoiceschanged=loadVoices}
+  let polls=0;const poll=setInterval(()=>{polls++;const n=heVoices().length;if(n!==voices.length)loadVoices();if(polls>40)clearInterval(poll)},500);
+  $('settings').addEventListener('toggle',loadVoices);}else{loadVoices()}
 (async()=>{try{
   if(!window.claude||!window.claude.use)return;
   const t=await window.claude.use('tts');if(!t)return;
@@ -426,7 +433,7 @@ if(synth){loadVoices();synth.onvoiceschanged=loadVoices;setTimeout(loadVoices,70
   t.onState(({state})=>{$('hushBtn').hidden=state==='idle'});
   loadVoices();
 }catch(e){}})();
-$('voiceSel').onchange=e=>{store.voice2=e.target.value;save()};
+store.voice2='';
 function engine(){const v=$('voiceSel').value;return v==='claude'?(cttsOK?'claude':'none'):v==='none'?'none':'device'}
 function speak(text,replace){
   $('say').textContent=text;
@@ -439,11 +446,11 @@ function speak(text,replace){
       else if(c==='unavailable'){cttsOK=false;loadVoices()}});
     return;
   }
-  if(en!=='device'||!synth||!voices.length)return;
+  if(en!=='device'||!synth)return;
   try{
     if(replace)synth.cancel();
     const u=new SpeechSynthesisUtterance(text);u.lang='he-IL';
-    const v=voices.find(v=>v.name===$('voiceSel').value)||voices[0];if(v)u.voice=v;
+    const v=voices.find(v=>vk(v)===$('voiceSel').value)||voices[0];if(v)u.voice=v;
     u.rate=0.95;u.pitch=1.0;synth.speak(u);
   }catch(e){}
 }
@@ -451,8 +458,17 @@ function hush(){try{if(synth)synth.cancel()}catch(e){}if(ctts)ctts.stop().catch(
 $('hushBtn').onclick=hush;
 $('testVoice').onclick=()=>{unlockAudio();chime('run');speak('היי! אני אלווה אתכם בכל ריצה. יאללה, רצים!',true)};
 const kgIn=$('kgIn'),cmIn=$('cmIn');kgIn.value=store.kg;cmIn.value=store.cm;
-kgIn.onchange=()=>{const v=parseFloat(kgIn.value);if(v>=30&&v<=250){store.kg=v;store.kgSet=true;save();renderHome()}else kgIn.value=store.kg};
-cmIn.onchange=()=>{const v=parseFloat(cmIn.value);if(v>=120&&v<=220){store.cm=v;save();renderHome()}else cmIn.value=store.cm};
+const numOf=el=>parseFloat(String(el.value).replace(',','.').replace(/[^0-9.]/g,''));
+function saveBody(show){
+  const k=numOf(kgIn),c=numOf(cmIn);let ok=true;
+  if(k>=30&&k<=250){store.kg=k;store.kgSet=true}else ok=false;
+  if(c>=120&&c<=220){store.cm=c}else ok=false;
+  save();renderHome();
+  if(show){$('bodyMsg').textContent=ok?'נשמר ✓ '+store.kg+' ק״ג, '+store.cm+' ס״מ':'צריך משקל בין 30 ל־250 וגובה בין 120 ל־220';if(!ok){kgIn.value=store.kg;cmIn.value=store.cm}}
+}
+['change','blur'].forEach(ev=>{kgIn.addEventListener(ev,()=>saveBody(true));cmIn.addEventListener(ev,()=>saveBody(true))});
+[kgIn,cmIn].forEach(el=>el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();el.blur()}}));
+$('saveBody').onclick=()=>saveBody(true);
 
 /* ---------- sounds ---------- */
 let ac=null;
