@@ -451,7 +451,7 @@ function speak(text,replace){
     if(replace)synth.cancel();
     const u=new SpeechSynthesisUtterance(text);u.lang='he-IL';
     const v=voices.find(v=>vk(v)===$('voiceSel').value)||voices[0];if(v)u.voice=v;
-    u.rate=0.95;u.pitch=1.0;synth.speak(u);
+    mixWithMusic();u.rate=0.95;u.pitch=1.0;synth.speak(u);
   }catch(e){}
 }
 function hush(){try{if(synth)synth.cancel()}catch(e){}if(ctts)ctts.stop().catch(()=>{})}
@@ -471,18 +471,24 @@ function saveBody(show){
 $('saveBody').onclick=()=>saveBody(true);
 
 /* ---------- sounds ---------- */
-let ac=null;
-function unlockAudio(){try{if(!ac)ac=new (window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume()}catch(e){}}
+/* iPhone: 'ambient' lets our sounds mix with Spotify instead of taking over the audio and pausing it */
+function mixWithMusic(){try{if(navigator.audioSession&&navigator.audioSession.type!=='ambient')navigator.audioSession.type='ambient'}catch(e){}}
+mixWithMusic();
+let ac=null,acSleep=null;
+function unlockAudio(){mixWithMusic();try{if(!ac)ac=new (window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();sleepAudioSoon(1500)}catch(e){}}
+/* keep the audio engine asleep between chimes, so it never holds the phone's audio */
+function sleepAudioSoon(ms){clearTimeout(acSleep);acSleep=setTimeout(()=>{try{if(ac&&ac.state==='running')ac.suspend()}catch(e){}},ms)}
 function tone(f,t0,dur,vol,type){
   const o=ac.createOscillator(),g=ac.createGain();o.type=type||'sine';o.frequency.value=f;
   g.gain.setValueAtTime(0,t0);g.gain.linearRampToValueAtTime(vol,t0+.02);g.gain.exponentialRampToValueAtTime(.0001,t0+dur);
   o.connect(g).connect(ac.destination);o.start(t0);o.stop(t0+dur+.05);
 }
 function chime(kind){
-  if(!store.sound||!ac)return;const t=ac.currentTime+.02;
+  if(!store.sound||!ac)return;mixWithMusic();
   const seq={run:[523,659,784,1047],walk:[784,659,523],tick:[880],warm:[523,659],cool:[659,523,392],done:[523,659,784,1047,784,1047,1319]}[kind]||[660];
   const step=kind==='done'?.13:.11;
-  seq.forEach((f,i)=>tone(f,t+i*step,kind==='tick'?.12:.35,kind==='tick'?.12:.22,kind==='tick'?'sine':'triangle'));
+  const go=()=>{const t=ac.currentTime+.02;seq.forEach((f,i)=>tone(f,t+i*step,kind==='tick'?.12:.35,kind==='tick'?.12:.22,kind==='tick'?'sine':'triangle'));sleepAudioSoon(seq.length*step*1000+800)};
+  try{if(ac.state!=='running')ac.resume().then(go).catch(()=>{});else go()}catch(e){}
   if(navigator.vibrate&&kind!=='tick')navigator.vibrate(kind==='run'?[120,60,120]:[200]);
 }
 $('soundToggle').onclick=e=>{store.sound=!store.sound;save();paintSound()};
